@@ -21,10 +21,13 @@ public class Packet(ushort sequence, PacketKind kind, byte[] payload)
     {
         using var stream = new MemoryStream();
 
-        // kind (1 byte)
+        // sequence (2 bytes)
+        PacketUtilities.WriteShortBE(stream, Sequence, "sequence");
+
+        // packet kind (1 byte)
         stream.WriteByte((byte)Kind);
 
-        // payloadLength (2 bytes)
+        // payload length (2 bytes)
         PacketUtilities.WriteShortBE(stream, (ushort)Payload.Length, "payloadLength");
 
         // payload (n bytes)
