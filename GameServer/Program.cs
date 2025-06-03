@@ -1,3 +1,4 @@
+using GameCommon;
 using System.Net.Sockets;
 
 namespace GameServer
@@ -13,20 +14,51 @@ namespace GameServer
             {
                 try
                 {
-                    var receivedResult = await udp.ReceiveAsync();
+                    var udpResult = await udp.ReceiveAsync();
 
                     // 受信したパケットを非同期で処理
                     _ = Task.Run(async () =>
                     {
+                        var udpData = udpResult.Buffer;
+                        var udpAddress = udpResult.RemoteEndPoint;
+
+                        // パケットを処理
+                        Packet outputPacket;
                         try
                         {
-                            var receivedData = receivedResult.Buffer;
-                            var replyData = PacketProcess.ProcessPacket(receivedData);
-                            await udp.SendAsync(replyData, replyData.Length, receivedResult.RemoteEndPoint);
+                            if (udpData.Length == 0)
+                            {
+                                throw new Exception("Received empty packet.");
+                            }
+
+                            Packet inputPacket = Packet.Deserialize(udpData);
+
+                            PacketProcess.ServerContext ctx = new(inputPacket);
+
+                            PacketProcess.ProcessPacket(ctx);
+
+                            if (ctx.Output == null)
+                            {
+                                throw new Exception("output is empty");
+                            }
+                            outputPacket = ctx.Output;
                         }
                         catch (Exception ex)
                         {
-                            Console.Error.WriteLine($"[{receivedResult.RemoteEndPoint}] Exception: {ex.Message}");
+                            Console.Error.WriteLine($"[{udpAddress}] Exception: {ex.Message}");
+                            var payload = new ErrorPayload(ErrorCode.InternalError);
+                            outputPacket = new Packet(0, PacketKind.Error, payload.Serialize());
+                        }
+
+                        // 結果を送信
+                        try
+                        {
+                            var outputData = outputPacket.Serialize();
+                            await udp.SendAsync(outputData, outputData.Length, udpAddress);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[{udpAddress}] Send error: {ex.Message}");
                         }
                     });
                 }

@@ -9,30 +9,53 @@ namespace GameServer
 {
     internal class PacketProcess
     {
-        public static byte[] ProcessPacket(byte[] packetData)
+        public class ServerContext(Packet input)
         {
-            if (packetData.Length == 0)
+            public Packet Input { get; } = input;
+            public Packet? Output { get; set; }
+
+            public ushort NextSequence => (ushort)(Input.Sequence + 1u);
+
+            public void Success()
             {
-                throw new Exception("Received empty packet.");
+                Output = new Packet(NextSequence, PacketKind.Ok, []);
             }
 
-            var packet = Packet.FromBytes(packetData);
-            switch (packet.Kind)
+            public void Fail(ErrorCode code)
+            {
+                var payload = new ErrorPayload(code);
+                Output = new Packet(NextSequence, PacketKind.Error, payload.Serialize());
+            }
+        }
+
+        public static void ProcessPacket(ServerContext ctx)
+        {
+            switch (ctx.Input.Kind)
             {
                 case PacketKind.Handshake:
-                    Console.WriteLine("Received Handshake packet.");
+                    ProcessHandshake(ctx);
                     break;
                 case PacketKind.Move:
-                    Console.WriteLine("Received Move packet.");
-                    // Console.WriteLine($"X = {req.Data["X"]}, Y = {req.Data["Y"]}");
+                    ProcessMove(ctx);
                     break;
                 default:
-                    throw new Exception($"Received unknown packet kind: {packet.Kind}");
+                    throw new Exception($"Received unknown packet kind: {ctx.Input.Kind}");
             }
+        }
 
-            var res = new Packet(PacketKind.Ok, []).ToBytes();
+        private static void ProcessHandshake(ServerContext ctx)
+        {
+            Console.WriteLine("Received Handshake packet.");
 
-            return res;
+            ctx.Success();
+        }
+
+        private static void ProcessMove(ServerContext ctx)
+        {
+            Console.WriteLine("Received Move packet.");
+            // Console.WriteLine($"X = {req.Data["X"]}, Y = {req.Data["Y"]}");
+
+            ctx.Success();
         }
     }
 }
