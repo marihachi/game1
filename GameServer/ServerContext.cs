@@ -13,12 +13,13 @@ public class ServerContext(Packet input, IPEndPoint clientEndpoint)
 
     public void Success()
     {
-        Output = new Packet(NextSequence, PacketKind.Ok, []);
+        var payload = new OkPayload();
+        Output = new Packet(Input.Sequence, PacketPayloadSerializer.Serialize(payload));
     }
 
-    public void Fail(ErrorCode code)
+    public void Fail(PacketErrorCode code)
     {
         var payload = new ErrorPayload(code);
-        Output = new Packet(NextSequence, PacketKind.Error, payload.Serialize());
+        Output = new Packet(Input.Sequence, PacketPayloadSerializer.Serialize(payload));
     }
 }

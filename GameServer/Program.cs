@@ -1,4 +1,5 @@
 using GameCommon;
+using System.Net;
 using System.Net.Sockets;
 
 namespace GameServer;
@@ -20,7 +21,9 @@ internal class Program
 
     static async Task ListenLoop()
     {
-        using var udp = new UdpClient(3000);
+        IPEndPoint serverEndpoint = new(NetworkUtilities.ResolveAddress("localhost"), 3000);
+
+        using var udp = new UdpClient(serverEndpoint);
 
         while (true)
         {
@@ -47,7 +50,8 @@ internal class Program
         var clientEndpoint = udpResult.RemoteEndPoint;
 
         // パケットを処理
-        Packet outputPacket;
+        Packet? outputPacket = null;
+        ushort? sequence = null;
         try
         {
             if (inputData.Length == 0)
@@ -55,7 +59,7 @@ internal class Program
                 throw new Exception("Received empty packet.");
             }
 
-            Packet inputPacket = Packet.Deserialize(inputData);
+            Packet inputPacket = PacketSerializer.Deserialize(inputData);
 
             ServerContext ctx = new(inputPacket, clientEndpoint);
 
@@ -70,19 +74,26 @@ internal class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[{clientEndpoint}] Exception: {ex.Message}");
-            var payload = new ErrorPayload(ErrorCode.InternalError);
-            outputPacket = new Packet(0, PacketKind.Error, payload.Serialize());
+
+            if (sequence != null)
+            {
+                var payload = new ErrorPayload(PacketErrorCode.InternalError);
+                outputPacket = new Packet(sequence.Value, PacketPayloadSerializer.Serialize(payload));
+            }
         }
 
         // 結果を送信
-        try
+        if (outputPacket != null)
         {
-            var outputData = outputPacket.Serialize();
-            await udp.SendAsync(outputData, outputData.Length, clientEndpoint);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[{clientEndpoint}] Send error: {ex.Message}");
-        }
+            try
+            {
+                var outputData = PacketSerializer.Serialize(outputPacket);
+                await udp.SendAsync(outputData, outputData.Length, clientEndpoint);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[{clientEndpoint}] Send error: {ex.Message}");
+            }
+        }  
     }
 }
